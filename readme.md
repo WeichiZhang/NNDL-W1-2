@@ -3,7 +3,7 @@ Overall Task:
 Task 1:
 Build a browser-only, GitHub Pages-deployable web app that performs interactive Exploratory Data Analysis (EDA) on the Kaggle Titanic dataset (from https://www.kaggle.com/competitions/titanic/data), which is split into train.csv (with Survived label) and test.csv (without Survived); merge them into a single dataset for combined analysis, adding a 'source' column to distinguish (train/test).
 Task 2:
-Visualize non-graphical analysis, univeriate  analysis, multivaritate analysis based on the data provided from the file “test.csv” and “train.csv” by the charts and dashboard.
+Visualize based on the data provided from the file “test.csv” and “train.csv” by the charts and dashboard.
 Task 3:
 Demonstrate the most important factors that caused the death in Titanic.
 Strictly output in two separate code blocks:

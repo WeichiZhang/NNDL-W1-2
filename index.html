@@ -74,6 +74,16 @@
             border-radius: 5px;
             margin: 20px 0;
         }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .error {
+            color: red;
+            padding: 10px;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -97,6 +107,8 @@
                 <input type="file" id="testFile" accept=".csv">
             </div>
             <button id="loadBtn">Load and Process Data</button>
+            <div id="loadingIndicator" class="loading">Processing data, please wait...</div>
+            <div id="errorMessage" class="error"></div>
         </div>
 
         <!-- Merge & Overview Section -->
@@ -159,7 +171,7 @@
 
             <h3>Correlation Analysis</h3>
             <div class="chart-container">
-                <canvas id="correlationHeatmap"></canvas>
+                <canvas id="correlationChart"></canvas>
             </div>
         </div>
 

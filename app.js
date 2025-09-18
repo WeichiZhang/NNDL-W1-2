@@ -20,6 +20,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const previewTableDiv = document.getElementById('previewTable');
     const numericStatsDiv = document.getElementById('numericStats');
     const categoricalStatsDiv = document.getElementById('categoricalStats');
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const errorMessage = document.getElementById('errorMessage');
     
     // Event listeners
     loadBtn.addEventListener('click', handleFileUpload);
@@ -31,11 +33,19 @@ document.addEventListener('DOMContentLoaded', function() {
 function handleFileUpload() {
     const trainFile = document.getElementById('trainFile').files[0];
     const testFile = document.getElementById('testFile').files[0];
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const errorMessage = document.getElementById('errorMessage');
+    
+    // Reset error message
+    errorMessage.style.display = 'none';
+    errorMessage.textContent = '';
     
     if (!trainFile || !testFile) {
-        alert('Please upload both train.csv and test.csv files');
+        showError('Please upload both train.csv and test.csv files');
         return;
     }
+    
+    loadingIndicator.style.display = 'block';
     
     // Parse CSV files
     Papa.parse(trainFile, {
@@ -52,16 +62,26 @@ function handleFileUpload() {
                 complete: function(testResults) {
                     testData = testResults.data.map(row => ({...row, source: 'test'}));
                     mergeDatasets();
+                    loadingIndicator.style.display = 'none';
                 },
                 error: function(error) {
-                    alert('Error parsing test.csv: ' + error);
+                    loadingIndicator.style.display = 'none';
+                    showError('Error parsing test.csv: ' + error);
                 }
             });
         },
         error: function(error) {
-            alert('Error parsing train.csv: ' + error);
+            loadingIndicator.style.display = 'none';
+            showError('Error parsing train.csv: ' + error);
         }
     });
+}
+
+// Show error message
+function showError(message) {
+    const errorMessage = document.getElementById('errorMessage');
+    errorMessage.textContent = message;
+    errorMessage.style.display = 'block';
 }
 
 // Merge train and test datasets
@@ -72,11 +92,15 @@ function mergeDatasets() {
 
 // Perform Exploratory Data Analysis
 function performEDA() {
-    displayOverview();
-    displayPreviewTable();
-    analyzeMissingValues();
-    generateStatisticalSummary();
-    createVisualizations();
+    try {
+        displayOverview();
+        displayPreviewTable();
+        analyzeMissingValues();
+        generateStatisticalSummary();
+        createVisualizations();
+    } catch (error) {
+        showError('Error during EDA: ' + error.message);
+    }
 }
 
 // Display dataset overview
@@ -106,7 +130,7 @@ function displayPreviewTable() {
     for (let i = 0; i < Math.min(5, mergedData.length); i++) {
         tableHTML += '<tr>';
         columns.forEach(col => {
-            tableHTML += `<td>${mergedData[i][col]}</td>`;
+            tableHTML += `<td>${mergedData[i][col] !== null && mergedData[i][col] !== undefined ? mergedData[i][col] : 'N/A'}</td>`;
         });
         tableHTML += '</tr>';
     }
@@ -121,7 +145,9 @@ function analyzeMissingValues() {
     const columns = Object.keys(mergedData[0]);
     
     columns.forEach(col => {
-        const missingCount = mergedData.filter(row => row[col] === null || row[col] === undefined || row[col] === '').length;
+        const missingCount = mergedData.filter(row => 
+            row[col] === null || row[col] === undefined || row[col] === '' || isNaN(row[col])
+        ).length;
         missingValues[col] = (missingCount / mergedData.length) * 100;
     });
     
@@ -159,22 +185,24 @@ function generateStatisticalSummary() {
     let numericHTML = '<h3>Numeric Statistics</h3><table><tr><th>Feature</th><th>Mean</th><th>Median</th><th>Std Dev</th></tr>';
     
     numericColumns.forEach(col => {
-        const values = mergedData.map(row => row[col]).filter(val => !isNaN(val));
-        const mean = values.reduce((a, b) => a + b, 0) / values.length;
-        const sorted = values.sort((a, b) => a - b);
-        const median = sorted[Math.floor(sorted.length / 2)];
-        const stdDev = Math.sqrt(values.reduce((sq, n) => sq + Math.pow(n - mean, 2), 0) / values.length);
-        
-        numericHTML += `<tr>
-            <td>${col}</td>
-            <td>${mean.toFixed(2)}</td>
-            <td>${median.toFixed(2)}</td>
-            <td>${stdDev.toFixed(2)}</td>
-        </tr>`;
+        const values = mergedData.map(row => row[col]).filter(val => val !== null && !isNaN(val));
+        if (values.length > 0) {
+            const mean = values.reduce((a, b) => a + b, 0) / values.length;
+            const sorted = [...values].sort((a, b) => a - b);
+            const median = sorted[Math.floor(sorted.length / 2)];
+            const stdDev = Math.sqrt(values.reduce((sq, n) => sq + Math.pow(n - mean, 2), 0) / values.length);
+            
+            numericHTML += `<tr>
+                <td>${col}</td>
+                <td>${mean.toFixed(2)}</td>
+                <td>${median.toFixed(2)}</td>
+                <td>${stdDev.toFixed(2)}</td>
+            </tr>`;
+        }
     });
     
     numericHTML += '</table>';
-    numericStatsDiv.innerHTML = numericHTML;
+    document.getElementById('numericStats').innerHTML = numericHTML;
     
     // Categorical statistics
     const categoricalColumns = ['Pclass', 'Sex', 'Embarked'];
@@ -201,7 +229,7 @@ function generateStatisticalSummary() {
         categoricalHTML += '</table>';
     });
     
-    categoricalStatsDiv.innerHTML = categoricalHTML;
+    document.getElementById('categoricalStats').innerHTML = categoricalHTML;
 }
 
 // Create all visualizations
@@ -209,7 +237,7 @@ function createVisualizations() {
     createDemographicCharts();
     createDistributionCharts();
     createSurvivalCharts();
-    createCorrelationHeatmap();
+    createCorrelationChart();
 }
 
 // Create demographic charts
@@ -285,14 +313,28 @@ function createDemographicCharts() {
 // Create distribution charts
 function createDistributionCharts() {
     // Age distribution
-    const ages = mergedData.map(row => row.Age).filter(age => !isNaN(age));
+    const ages = mergedData.map(row => row.Age).filter(age => age !== null && !isNaN(age));
+    const ageRanges = ['0-10', '11-20', '21-30', '31-40', '41-50', '51-60', '61-70', '71+'];
+    const ageCounts = Array(ageRanges.length).fill(0);
+    
+    ages.forEach(age => {
+        if (age <= 10) ageCounts[0]++;
+        else if (age <= 20) ageCounts[1]++;
+        else if (age <= 30) ageCounts[2]++;
+        else if (age <= 40) ageCounts[3]++;
+        else if (age <= 50) ageCounts[4]++;
+        else if (age <= 60) ageCounts[5]++;
+        else if (age <= 70) ageCounts[6]++;
+        else ageCounts[7]++;
+    });
+    
     new Chart(document.getElementById('ageChart'), {
-        type: 'histogram',
+        type: 'bar',
         data: {
-            labels: ages,
+            labels: ageRanges,
             datasets: [{
                 label: 'Age Distribution',
-                data: ages,
+                data: ageCounts,
                 backgroundColor: 'rgba(54, 162, 235, 0.7)',
                 borderColor: 'rgba(54, 162, 235, 1)',
                 borderWidth: 1
@@ -310,7 +352,7 @@ function createDistributionCharts() {
                 x: {
                     title: {
                         display: true,
-                        text: 'Age'
+                        text: 'Age Range'
                     }
                 },
                 y: {
@@ -324,14 +366,27 @@ function createDistributionCharts() {
     });
     
     // Fare distribution
-    const fares = mergedData.map(row => row.Fare).filter(fare => !isNaN(fare) && fare < 200); // Filter outliers
+    const fares = mergedData.map(row => row.Fare).filter(fare => fare !== null && !isNaN(fare));
+    const fareRanges = ['0-10', '11-20', '21-30', '31-40', '41-50', '51-100', '101+'];
+    const fareCounts = Array(fareRanges.length).fill(0);
+    
+    fares.forEach(fare => {
+        if (fare <= 10) fareCounts[0]++;
+        else if (fare <= 20) fareCounts[1]++;
+        else if (fare <= 30) fareCounts[2]++;
+        else if (fare <= 40) fareCounts[3]++;
+        else if (fare <= 50) fareCounts[4]++;
+        else if (fare <= 100) fareCounts[5]++;
+        else fareCounts[6]++;
+    });
+    
     new Chart(document.getElementById('fareChart'), {
-        type: 'histogram',
+        type: 'bar',
         data: {
-            labels: fares,
+            labels: fareRanges,
             datasets: [{
                 label: 'Fare Distribution',
-                data: fares,
+                data: fareCounts,
                 backgroundColor: 'rgba(255, 99, 132, 0.7)',
                 borderColor: 'rgba(255, 99, 132, 1)',
                 borderWidth: 1
@@ -342,14 +397,14 @@ function createDistributionCharts() {
             plugins: {
                 title: {
                     display: true,
-                    text: 'Fare Distribution (Outliers Filtered)'
+                    text: 'Fare Distribution'
                 }
             },
             scales: {
                 x: {
                     title: {
                         display: true,
-                        text: 'Fare'
+                        text: 'Fare Range'
                     }
                 },
                 y: {
@@ -368,8 +423,8 @@ function createSurvivalCharts() {
     // Survival by sex
     const survivalBySexData = {};
     trainData.forEach(passenger => {
-        if (passenger.Survived !== undefined) {
-            const sex = passenger.Sex;
+        if (passenger.Survived !== undefined && passenger.Survived !== null) {
+            const sex = passenger.Sex || 'Unknown';
             if (!survivalBySexData[sex]) {
                 survivalBySexData[sex] = { survived: 0, died: 0 };
             }
@@ -426,8 +481,8 @@ function createSurvivalCharts() {
     // Survival by passenger class
     const survivalByPclassData = {};
     trainData.forEach(passenger => {
-        if (passenger.Survived !== undefined) {
-            const pclass = passenger.Pclass;
+        if (passenger.Survived !== undefined && passenger.Survived !== null) {
+            const pclass = passenger.Pclass || 'Unknown';
             if (!survivalByPclassData[pclass]) {
                 survivalByPclassData[pclass] = { survived: 0, died: 0 };
             }
@@ -482,15 +537,15 @@ function createSurvivalCharts() {
     });
 }
 
-// Create correlation heatmap
-function createCorrelationHeatmap() {
+// Create correlation chart
+function createCorrelationChart() {
     // Prepare data for correlation analysis (only train data with Survived values)
     const analysisData = trainData.filter(passenger => 
-        !isNaN(passenger.Age) && 
-        !isNaN(passenger.Fare) && 
-        !isNaN(passenger.SibSp) && 
-        !isNaN(passenger.Parch) &&
-        passenger.Survived !== undefined
+        passenger.Age !== null && !isNaN(passenger.Age) && 
+        passenger.Fare !== null && !isNaN(passenger.Fare) && 
+        passenger.SibSp !== null && !isNaN(passenger.SibSp) && 
+        passenger.Parch !== null && !isNaN(passenger.Parch) &&
+        passenger.Survived !== null && !isNaN(passenger.Survived)
     );
     
     // Convert categorical variables to numeric
@@ -507,77 +562,63 @@ function createCorrelationHeatmap() {
     
     // Calculate correlations
     const features = ['Pclass', 'Sex', 'Age', 'SibSp', 'Parch', 'Fare', 'Embarked', 'Survived'];
-    const correlations = {};
+    const correlations = [];
     
     features.forEach(feature1 => {
-        correlations[feature1] = {};
         features.forEach(feature2 => {
-            const corr = calculateCorrelation(
-                numericData.map(d => d[feature1]),
-                numericData.map(d => d[feature2])
-            );
-            correlations[feature1][feature2] = corr;
+            if (feature1 !== feature2) {
+                const corr = calculateCorrelation(
+                    numericData.map(d => d[feature1]),
+                    numericData.map(d => d[feature2])
+                );
+                correlations.push({
+                    x: feature1,
+                    y: feature2,
+                    v: corr
+                });
+            }
         });
     });
     
-    // Create heatmap
-    const ctx = document.getElementById('correlationHeatmap').getContext('2d');
-    new Chart(ctx, {
-        type: 'matrix',
+    // Create bar chart showing correlations with survival
+    const survivalCorrelations = {};
+    features.forEach(feature => {
+        if (feature !== 'Survived') {
+            const corr = calculateCorrelation(
+                numericData.map(d => d[feature]),
+                numericData.map(d => d['Survived'])
+            );
+            survivalCorrelations[feature] = corr;
+        }
+    });
+    
+    new Chart(document.getElementById('correlationChart'), {
+        type: 'bar',
         data: {
+            labels: Object.keys(survivalCorrelations),
             datasets: [{
-                label: 'Correlation Matrix',
-                data: features.flatMap((feature1, i) => 
-                    features.map((feature2, j) => ({
-                        x: feature1,
-                        y: feature2,
-                        v: correlations[feature1][feature2]
-                    }))
-                ),
-                backgroundColor(context) {
-                    const value = context.dataset.data[context.dataIndex].v;
-                    const alpha = Math.abs(value);
-                    return value < 0 ? 
-                        `rgba(255, 99, 132, ${alpha})` : 
-                        `rgba(75, 192, 192, ${alpha})`;
-                },
-                borderWidth: 1,
-                borderColor: 'white',
-                width: ({chart}) => (chart.chartArea || {}).width / features.length - 1,
-                height: ({chart}) => (chart.chartArea || {}).height / features.length - 1
+                label: 'Correlation with Survival',
+                data: Object.values(survivalCorrelations),
+                backgroundColor: Object.values(survivalCorrelations).map(val => 
+                    val > 0 ? 'rgba(75, 192, 192, 0.7)' : 'rgba(255, 99, 132, 0.7)'
+                )
             }]
         },
         options: {
             responsive: true,
             plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: (context) => {
-                            const value = context.dataset.data[context.dataIndex].v;
-                            return `Correlation: ${value.toFixed(3)}`;
-                        }
-                    }
-                },
                 title: {
                     display: true,
-                    text: 'Correlation Heatmap'
+                    text: 'Feature Correlation with Survival'
                 }
             },
             scales: {
-                x: {
-                    type: 'category',
-                    labels: features,
-                    title: {
-                        display: true,
-                        text: 'Features'
-                    }
-                },
                 y: {
-                    type: 'category',
-                    labels: features,
+                    min: -1,
+                    max: 1,
                     title: {
                         display: true,
-                        text: 'Features'
+                        text: 'Correlation Coefficient'
                     }
                 }
             }
@@ -613,83 +654,95 @@ function calculateCorrelation(x, y) {
 // Export merged data as CSV
 function exportCsv() {
     if (mergedData.length === 0) {
-        alert('No data to export');
+        showError('No data to export');
         return;
     }
     
-    const csv = Papa.unparse(mergedData);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'titanic_merged_data.csv');
-    link.style.visibility = 'hidden';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+        const csv = Papa.unparse(mergedData);
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'titanic_merged_data.csv');
+        link.style.visibility = 'hidden';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (error) {
+        showError('Error exporting CSV: ' + error.message);
+    }
 }
 
 // Export JSON summary
 function exportJson() {
     if (mergedData.length === 0) {
-        alert('No data to export');
+        showError('No data to export');
         return;
     }
     
-    // Create summary object
-    const summary = {
-        datasetInfo: {
-            totalRecords: mergedData.length,
-            trainRecords: trainData.length,
-            testRecords: testData.length,
-            features: FEATURE_COLUMNS
-        },
-        missingValues: {},
-        numericStats: {},
-        categoricalStats: {}
-    };
-    
-    // Calculate missing values
-    Object.keys(mergedData[0]).forEach(col => {
-        const missingCount = mergedData.filter(row => row[col] === null || row[col] === undefined || row[col] === '').length;
-        summary.missingValues[col] = (missingCount / mergedData.length) * 100;
-    });
-    
-    // Calculate numeric statistics
-    const numericColumns = ['Age', 'Fare', 'SibSp', 'Parch'];
-    numericColumns.forEach(col => {
-        const values = mergedData.map(row => row[col]).filter(val => !isNaN(val));
-        const mean = values.reduce((a, b) => a + b, 0) / values.length;
-        const sorted = values.sort((a, b) => a - b);
-        const median = sorted[Math.floor(sorted.length / 2)];
-        const stdDev = Math.sqrt(values.reduce((sq, n) => sq + Math.pow(n - mean, 2), 0) / values.length);
-        
-        summary.numericStats[col] = {
-            mean: mean.toFixed(2),
-            median: median.toFixed(2),
-            stdDev: stdDev.toFixed(2)
+    try {
+        // Create summary object
+        const summary = {
+            datasetInfo: {
+                totalRecords: mergedData.length,
+                trainRecords: trainData.length,
+                testRecords: testData.length,
+                features: FEATURE_COLUMNS
+            },
+            missingValues: {},
+            numericStats: {},
+            categoricalStats: {}
         };
-    });
-    
-    // Calculate categorical statistics
-    const categoricalColumns = ['Pclass', 'Sex', 'Embarked'];
-    categoricalColumns.forEach(col => {
-        summary.categoricalStats[col] = countValues(mergedData, col);
-    });
-    
-    // Create and download JSON file
-    const json = JSON.stringify(summary, null, 2);
-    const blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'titanic_summary.json');
-    link.style.visibility = 'hidden';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+        
+        // Calculate missing values
+        Object.keys(mergedData[0]).forEach(col => {
+            const missingCount = mergedData.filter(row => 
+                row[col] === null || row[col] === undefined || row[col] === '' || isNaN(row[col])
+            ).length;
+            summary.missingValues[col] = (missingCount / mergedData.length) * 100;
+        });
+        
+        // Calculate numeric statistics
+        const numericColumns = ['Age', 'Fare', 'SibSp', 'Parch'];
+        numericColumns.forEach(col => {
+            const values = mergedData.map(row => row[col]).filter(val => val !== null && !isNaN(val));
+            if (values.length > 0) {
+                const mean = values.reduce((a, b) => a + b, 0) / values.length;
+                const sorted = [...values].sort((a, b) => a - b);
+                const median = sorted[Math.floor(sorted.length / 2)];
+                const stdDev = Math.sqrt(values.reduce((sq, n) => sq + Math.pow(n - mean, 2), 0) / values.length);
+                
+                summary.numericStats[col] = {
+                    mean: parseFloat(mean.toFixed(2)),
+                    median: parseFloat(median.toFixed(2)),
+                    stdDev: parseFloat(stdDev.toFixed(2))
+                };
+            }
+        });
+        
+        // Calculate categorical statistics
+        const categoricalColumns = ['Pclass', 'Sex', 'Embarked'];
+        categoricalColumns.forEach(col => {
+            summary.categoricalStats[col] = countValues(mergedData, col);
+        });
+        
+        // Create and download JSON file
+        const json = JSON.stringify(summary, null, 2);
+        const blob = new Blob([json], { type: 'application/json;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'titanic_summary.json');
+        link.style.visibility = 'hidden';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (error) {
+        showError('Error exporting JSON: ' + error.message);
+    }
 }
